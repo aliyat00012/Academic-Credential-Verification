@@ -5,3 +5,5 @@ R
 "contracts/credential-issuance.clar,e/8/e8cc6a7425325a7af9cc95450ccc857f9fe46165
 Q
 !tests/credential-issuance.test.ts,8/a/8a655c35c0ef4977814e5de81eea3103aaff30f0
+N
+contracts/fraud-detection.clar,1/a/1ac81b10de498fa6b120053e3540fde5bf8889c1
