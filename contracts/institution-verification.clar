@@ -3,13 +3,24 @@
 
 ;; Define data variables
 (define-data-var admin principal tx-sender)
+
+;; Define map for institutions
 (define-map institutions
-  ((institution-id uint))
-  ((name (string-ascii 100))
-   (country (string-ascii 50))
-   (website (string-ascii 100))
-   (verified bool)
-   (registration-date uint)))
+  { institution-id: uint }
+  {
+    name: (string-ascii 100),
+    country: (string-ascii 50),
+    website: (string-ascii 100),
+    verified: bool,
+    registration-date: uint
+  }
+)
+
+;; Define map for institution admins
+(define-map institution-admins
+  { institution-id: uint, admin-address: principal }
+  { active: bool }
+)
 
 ;; Define error codes
 (define-constant ERR_UNAUTHORIZED u1)
@@ -49,17 +60,28 @@
                       (merge institution {verified: true})))
       (err ERR_NOT_FOUND))))
 
+;; Add an admin for an institution (contract admin only)
+(define-public (add-institution-admin (institution-id uint) (admin-address principal))
+  (begin
+    (asserts! (is-admin) (err ERR_UNAUTHORIZED))
+    (asserts! (is-some (map-get? institutions {institution-id: institution-id})) (err ERR_NOT_FOUND))
+    (ok (map-set institution-admins
+        {institution-id: institution-id, admin-address: admin-address}
+        {active: true}))))
+
+;; Check if an address is an admin for an institution
+(define-read-only (is-institution-admin (institution-id uint) (admin-address principal))
+  (default-to false (get active (map-get? institution-admins {institution-id: institution-id, admin-address: admin-address}))))
+
 ;; Check if an institution is verified
 (define-read-only (is-institution-verified (institution-id uint))
-  (match (map-get? institutions {institution-id: institution-id})
-    institution (ok (get verified institution))
-    (err ERR_NOT_FOUND)))
+  (default-to false (get verified (map-get? institutions {institution-id: institution-id}))))
 
 ;; Get institution details
 (define-read-only (get-institution (institution-id uint))
   (map-get? institutions {institution-id: institution-id}))
 
-;; Transfer admin rights (admin only)
+;; Transfer contract admin rights (admin only)
 (define-public (transfer-admin (new-admin principal))
   (begin
     (asserts! (is-admin) (err ERR_UNAUTHORIZED))

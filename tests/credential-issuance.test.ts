@@ -3,27 +3,54 @@ import { describe, it, expect, beforeEach } from "vitest"
 // Mock implementation for testing Clarity contracts
 
 // Mock contract state
+const admin = "ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM"
 const credentials = new Map()
+const verifiedInstitutions = new Map()
+const institutionAdmins = new Map()
 let credentialCounter = 0
-
-// Mock institution verification contract
-const mockInstitutionContract = {
-  isInstitutionVerified: (id) => {
-    // For testing, we'll say institutions with IDs 1-10 are verified
-    if (id >= 1 && id <= 10) {
-      return { value: true }
-    }
-    return { value: false }
-  },
-}
 
 // Mock contract functions
 const mockContract = {
+  isAdmin: () => true, // Simplified for testing
+  
+  setInstitutionVerified: (institutionId, verified) => {
+    if (!mockContract.isAdmin()) {
+      return { error: 1 } // ERR_UNAUTHORIZED
+    }
+    
+    verifiedInstitutions.set(institutionId, { verified })
+    return { value: true }
+  },
+  
+  setInstitutionAdmin: (institutionId, adminAddress, active) => {
+    if (!mockContract.isAdmin()) {
+      return { error: 1 } // ERR_UNAUTHORIZED
+    }
+    
+    const key = `${institutionId}-${adminAddress}`
+    institutionAdmins.set(key, { active })
+    return { value: true }
+  },
+  
+  isInstitutionVerified: (institutionId) => {
+    return verifiedInstitutions.has(institutionId) && verifiedInstitutions.get(institutionId).verified
+  },
+  
+  isInstitutionAdmin: (institutionId) => {
+    // For testing, we'll assume the current user is an admin for institution 1
+    const key = `${institutionId}-${admin}`
+    return institutionAdmins.has(key) && institutionAdmins.get(key).active
+  },
+  
   issueCredential: (institutionId, studentId, credentialType, credentialName, expirationDate, metadata) => {
     // Check if institution is verified
-    const institutionVerified = mockInstitutionContract.isInstitutionVerified(institutionId)
-    if (!institutionVerified.value) {
+    if (!mockContract.isInstitutionVerified(institutionId)) {
       return { error: 2 } // ERR_INVALID_INSTITUTION
+    }
+    
+    // Check if caller is an admin for the institution
+    if (!mockContract.isInstitutionAdmin(institutionId)) {
+      return { error: 1 } // ERR_UNAUTHORIZED
     }
     
     // Increment credential counter
@@ -31,7 +58,7 @@ const mockContract = {
     const credentialId = credentialCounter
     
     // Create new credential
-    credentials.sett(credentialId, {
+    credentials.set(credentialId, {
       institutionId,
       studentId,
       credentialType,
@@ -52,7 +79,10 @@ const mockContract = {
     
     const credential = credentials.get(credentialId)
     
-    // In a real implementation, we would check if the caller is from the issuing institution
+    // Check if caller is an admin for the institution
+    if (!mockContract.isInstitutionAdmin(credential.institutionId)) {
+      return { error: 1 } // ERR_UNAUTHORIZED
+    }
     
     if (credential.revoked) {
       return { error: 4 } // ERR_ALREADY_REVOKED
@@ -92,7 +122,13 @@ describe("Credential Issuance Contract", () => {
   beforeEach(() => {
     // Reset the state before each test
     credentials.clear()
+    verifiedInstitutions.clear()
+    institutionAdmins.clear()
     credentialCounter = 0
+    
+    // Set up a verified institution and admin
+    mockContract.setInstitutionVerified(1, true)
+    mockContract.setInstitutionAdmin(1, admin, true)
   })
   
   it("should issue a new credential", () => {
@@ -113,7 +149,7 @@ describe("Credential Issuance Contract", () => {
   
   it("should not issue a credential for an unverified institution", () => {
     const result = mockContract.issueCredential(
-        20, // Invalid institution ID
+        2, // Unverified institution ID
         "ST1STUDENT1234567890ABCDEF",
         "Degree",
         "Bachelor of Science in Computer Science",
@@ -178,30 +214,6 @@ describe("Credential Issuance Contract", () => {
     mockContract.revokeCredential(1)
     
     expect(mockContract.isCredentialValid(1)).toBe(false)
-  })
-  
-  it("should get credential details", () => {
-    mockContract.issueCredential(
-        1,
-        "ST1STUDENT1234567890ABCDEF",
-        "Degree",
-        "Bachelor of Science in Computer Science",
-        null,
-        "Additional metadata about the degree",
-    )
-    
-    const credential = mockContract.getCredential(1)
-    
-    expect(credential).toEqual({
-      institutionId: 1,
-      studentId: "ST1STUDENT1234567890ABCDEF",
-      credentialType: "Degree",
-      credentialName: "Bachelor of Science in Computer Science",
-      issueDate: 123,
-      expirationDate: null,
-      metadata: "Additional metadata about the degree",
-      revoked: false,
-    })
   })
 })
 

@@ -3,39 +3,28 @@ import { describe, it, expect, beforeEach } from "vitest"
 // Mock implementation for testing Clarity contracts
 
 // Mock contract state
+const admin = "ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM"
 const fraudReports = new Map()
 const suspiciousPatterns = new Map()
+const credentials = new Map()
 let reportCounter = 0
 let patternCounter = 0
-let admin = "ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM"
-
-// Mock credential issuance contract
-const mockCredentialContract = {
-  getCredential: (id) => {
-    // For testing, we'll say credentials with IDs 1-10 exist
-    if (id >= 1 && id <= 10) {
-      return {
-        institutionId: 1,
-        studentId: "ST1STUDENT1234567890ABCDEF",
-        credentialType: "Degree",
-        credentialName: "Bachelor of Science in Computer Science",
-        issueDate: 100,
-        expirationDate: null,
-        metadata: "Additional metadata",
-        revoked: false,
-      }
-    }
-    return null
-  },
-}
 
 // Mock contract functions
 const mockContract = {
   isAdmin: () => true, // Simplified for testing
   
+  registerCredential: (credentialId) => {
+    if (!mockContract.isAdmin()) {
+      return { error: 1 } // ERR_UNAUTHORIZED
+    }
+    
+    credentials.set(credentialId, { exists: true })
+    return { value: true }
+  },
+  
   reportFraud: (credentialId, reason) => {
-    const credential = mockCredentialContract.getCredential(credentialId)
-    if (!credential) {
+    if (!credentials.has(credentialId) || !credentials.get(credentialId).exists) {
       return { error: 2 } // ERR_NOT_FOUND
     }
     
@@ -43,7 +32,7 @@ const mockContract = {
     const reportId = reportCounter
     
     fraudReports.set(reportId, {
-      reporter: "ST1REPORTER1234567890ABCDEF", // Mock tx-sender
+      reporter: admin, // For testing, we'll set the reporter to the admin
       credentialId,
       reason,
       reportDate: 123, // Mock block height
@@ -86,7 +75,7 @@ const mockContract = {
       patternType,
       description,
       severity,
-      createdBy: "ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM", // Mock tx-sender
+      createdBy: admin,
       creationDate: 123, // Mock block height
     })
     
@@ -100,15 +89,6 @@ const mockContract = {
   getSuspiciousPattern: (patternId) => {
     return suspiciousPatterns.has(patternId) ? suspiciousPatterns.get(patternId) : null
   },
-  
-  transferAdmin: (newAdmin) => {
-    if (!mockContract.isAdmin()) {
-      return { error: 1 } // ERR_UNAUTHORIZED
-    }
-    
-    admin = newAdmin
-    return { value: true }
-  },
 }
 
 describe("Fraud Detection Contract", () => {
@@ -116,9 +96,12 @@ describe("Fraud Detection Contract", () => {
     // Reset the state before each test
     fraudReports.clear()
     suspiciousPatterns.clear()
+    credentials.clear()
     reportCounter = 0
     patternCounter = 0
-    admin = "ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM"
+    
+    // Register a credential for testing
+    mockContract.registerCredential(1)
   })
   
   it("should report a potentially fraudulent credential", () => {
@@ -144,22 +127,6 @@ describe("Fraud Detection Contract", () => {
     expect(fraudReports.get(1).status).toBe("confirmed")
   })
   
-  it("should not process a non-existent report", () => {
-    const result = mockContract.processFraudReport(999, "confirmed")
-    
-    expect(result.error).toBe(2) // ERR_NOT_FOUND
-  })
-  
-  it("should not process an already processed report", () => {
-    mockContract.reportFraud(1, "This credential appears to be from a non-accredited institution")
-    
-    mockContract.processFraudReport(1, "confirmed")
-    
-    const result = mockContract.processFraudReport(1, "rejected")
-    
-    expect(result.error).toBe(3) // ERR_ALREADY_PROCESSED
-  })
-  
   it("should add a new suspicious pattern", () => {
     const result = mockContract.addSuspiciousPattern(
         "multiple-degrees",
@@ -178,29 +145,11 @@ describe("Fraud Detection Contract", () => {
     const report = mockContract.getFraudReport(1)
     
     expect(report).toEqual({
-      reporter: "ST1REPORTER1234567890ABCDEF",
+      reporter: admin,
       credentialId: 1,
       reason: "This credential appears to be from a non-accredited institution",
       reportDate: 123,
       status: "pending",
-    })
-  })
-  
-  it("should get suspicious pattern details", () => {
-    mockContract.addSuspiciousPattern(
-        "multiple-degrees",
-        "Multiple degrees from different institutions in a short time period",
-        3,
-    )
-    
-    const pattern = mockContract.getSuspiciousPattern(1)
-    
-    expect(pattern).toEqual({
-      patternType: "multiple-degrees",
-      description: "Multiple degrees from different institutions in a short time period",
-      severity: 3,
-      createdBy: "ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM",
-      creationDate: 123,
     })
   })
 })

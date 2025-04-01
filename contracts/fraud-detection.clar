@@ -1,29 +1,41 @@
 ;; Fraud Detection Contract
 ;; Identifies suspicious credential patterns
 
-;; Import credential issuance contract
-(use-trait credential-trait .credential-issuance.get-credential)
-
 ;; Define data variables
-(define-map fraud-reports
-  ((report-id uint))
-  ((reporter principal)
-   (credential-id uint)
-   (reason (string-utf8 500))
-   (report-date uint)
-   (status (string-ascii 20))))
+(define-data-var admin principal tx-sender)
 
+;; Define map for fraud reports
+(define-map fraud-reports
+  { report-id: uint }
+  {
+    reporter: principal,
+    credential-id: uint,
+    reason: (string-utf8 500),
+    report-date: uint,
+    status: (string-ascii 20)
+  }
+)
+
+;; Define map for suspicious patterns
 (define-map suspicious-patterns
-  ((pattern-id uint))
-  ((pattern-type (string-ascii 50))
-   (description (string-utf8 500))
-   (severity uint)
-   (created-by principal)
-   (creation-date uint)))
+  { pattern-id: uint }
+  {
+    pattern-type: (string-ascii 50),
+    description: (string-utf8 500),
+    severity: uint,
+    created-by: principal,
+    creation-date: uint
+  }
+)
+
+;; Define map for credentials (simplified)
+(define-map credentials
+  { credential-id: uint }
+  { exists: bool }
+)
 
 (define-data-var report-counter uint u0)
 (define-data-var pattern-counter uint u0)
-(define-data-var admin principal tx-sender)
 
 ;; Define error codes
 (define-constant ERR_UNAUTHORIZED u1)
@@ -34,15 +46,20 @@
 (define-private (is-admin)
   (is-eq tx-sender (var-get admin)))
 
+;; Register a credential (simplified)
+(define-public (register-credential (credential-id uint))
+  (begin
+    (asserts! (is-admin) (err ERR_UNAUTHORIZED))
+    (ok (map-set credentials
+        {credential-id: credential-id}
+        {exists: true}))))
+
 ;; Report a potentially fraudulent credential
-(define-public (report-fraud
-    (credential-id uint)
-    (reason (string-utf8 500))
-    (credential-trait <credential-trait>))
+(define-public (report-fraud (credential-id uint) (reason (string-utf8 500)))
   (let ((report-id (+ (var-get report-counter) u1)))
     (begin
-      ;; Verify the credential exists
-      (asserts! (is-some (contract-call? credential-trait get-credential credential-id)) (err ERR_NOT_FOUND))
+      ;; Verify the credential exists (simplified)
+      (asserts! (default-to false (get exists (map-get? credentials {credential-id: credential-id}))) (err ERR_NOT_FOUND))
 
       (map-set fraud-reports
         {report-id: report-id}
@@ -96,7 +113,7 @@
 (define-read-only (get-suspicious-pattern (pattern-id uint))
   (map-get? suspicious-patterns {pattern-id: pattern-id}))
 
-;; Transfer admin rights (admin only)
+;; Transfer contract admin rights (admin only)
 (define-public (transfer-admin (new-admin principal))
   (begin
     (asserts! (is-admin) (err ERR_UNAUTHORIZED))

@@ -11,3 +11,5 @@ M
 tests/fraud-detection.test.ts,f/d/fd6b1e606481c7e9c071973e78dc7e74ad69e567
 W
 'contracts/institution-verification.clar,d/d/dd6f29d581e4fc80d30e9eb12d64363ad190bf89
+V
+&tests/institution-verification.test.ts,5/e/5edadce64a6eee8f2384257efbac2d5b1f7dd860
